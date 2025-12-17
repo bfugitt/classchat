@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom OS Link</title>
+    <style>
+        body { font-family: monospace; background: #222; color: #0f0; padding: 20px; }
+        #login-screen, #app-screen { max-width: 800px; margin: 0 auto; border: 1px solid #0f0; padding: 20px; }
+        input, select, button { background: #000; color: #0f0; border: 1px solid #0f0; padding: 10px; margin: 5px 0; width: 100%; font-family: monospace; }
+        button:hover { background: #0f0; color: #000; cursor: pointer; }
+        
+        /* Chat Layout */
+        #chat-container { display: flex; height: 400px; border-top: 1px solid #0f0; margin-top: 20px; }
+        #user-list { width: 30%; border-right: 1px solid #0f0; overflow-y: scroll; padding: 10px; }
+        #messages { width: 70%; overflow-y: scroll; padding: 10px; display: flex; flex-direction: column; }
+        
+        .message { margin-bottom: 10px; padding: 5px; border-left: 2px solid #0f0; }
+        .message.private { border-left: 2px solid #ff00ff; color: #ff00ff; } /* Distinct color for DMs */
+        .timestamp { font-size: 0.8em; opacity: 0.7; }
+        
+        .user-item { cursor: pointer; padding: 5px; }
+        .user-item:hover { background: #0f0; color: #000; }
+        .user-item.selected { background: #0f0; color: #000; font-weight: bold; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h2>>> SYSTEM LOGIN</h2>
+        <input type="text" id="username" placeholder="Enter Codename (Name)">
+        <input type="text" id="room-code" placeholder="Enter Frequency (Room Code)">
+        <select id="role">
+            <option value="student">Role: Student</option>
+            <option value="teacher">Role: Teacher (Admin)</option>
+        </select>
+        <button onclick="login()">CONNECT</button>
+    </div>
+
+    <div id="app-screen" class="hidden">
+        <h2 id="status-bar">>> CONNECTED: <span id="display-room"></span></h2>
+        <p>Logged in as: <span id="display-name"></span></p>
+        
+        <div style="background: #111; padding: 10px; border: 1px dashed #0f0;">
+            <label>Targeting: <span id="target-display" style="font-weight:bold;">ALL (Broadcast)</span></label>
+            <input type="text" id="msg-input" placeholder="Type message data...">
+            <button onclick="sendMessage()">TRANSMIT</button>
+        </div>
+
+        <div id="chat-container">
+            <div id="user-list">
+                <div class="user-item selected" onclick="selectUser('ALL')">> BROADCAST (ALL)</div>
+                </div>
+            <div id="messages">
+                </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        // --- CONFIGURATION ---
+        // TODO: Replace this object with YOUR actual Firebase config from the console
+const firebaseConfig = {
+    apiKey: "AIzaSyA_5r6DAUKkYv5TFP9XM3K3SnRBtmdUS0g",
+    authDomain: "classroom-chat-756d5.firebaseapp.com",
+    databaseURL: "https://classroom-chat-756d5-default-rtdb.firebaseio.com",
+    projectId: "classroom-chat-756d5",
+    storageBucket: "classroom-chat-756d5.firebasestorage.app",
+    messagingSenderId: "805467042314",
+    appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
+    measurementId: "G-04X2N5MR75"
+  };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        // State Variables
+        let currentUser = { name: "", room: "", role: "" };
+        let selectedTarget = "ALL"; // Who are we talking to?
+
+        // --- FUNCTIONS ---
+
+        function login() {
+            const name = document.getElementById("username").value.trim();
+            const room = document.getElementById("room-code").value.trim();
+            const role = document.getElementById("role").value;
+
+            if(!name || !room) return alert("Credentials required.");
+
+            currentUser = { name, room, role };
+
+            // UI Switch
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("app-screen").classList.remove("hidden");
+            document.getElementById("display-room").innerText = room;
+            document.getElementById("display-name").innerText = name + " (" + role + ")";
+
+            // Register Presence in Database
+            db.ref(`rooms/${room}/users/${name}`).set({
+                role: role,
+                lastSeen: Date.now()
+            });
+
+            // Start Listeners
+            listenForMessages();
+            listenForUsers();
+        }
+
+        function listenForUsers() {
+            const userListDiv = document.getElementById("user-list");
+            
+            // Listen for new users appearing in this room
+            db.ref(`rooms/${currentUser.room}/users`).on('value', (snapshot) => {
+                // Clear list (except Broadcast)
+                userListDiv.innerHTML = '<div class="user-item selected" onclick="selectUser(\'ALL\')">> BROADCAST (ALL)</div>';
+                
+                snapshot.forEach((childSnapshot) => {
+                    const userName = childSnapshot.key;
+                    if(userName !== currentUser.name) { // Don't show myself
+                        const div = document.createElement("div");
+                        div.className = "user-item";
+                        div.innerText = `> ${userName}`;
+                        div.onclick = () => selectUser(userName);
+                        userListDiv.appendChild(div);
+                    }
+                });
+            });
+        }
+
+        function selectUser(targetName) {
+            selectedTarget = targetName;
+            document.getElementById("target-display").innerText = targetName;
+            
+            // Visual feedback on list
+            document.querySelectorAll(".user-item").forEach(el => el.classList.remove("selected"));
+            event.target.classList.add("selected");
+        }
+
+        function sendMessage() {
+            const input = document.getElementById("msg-input");
+            const text = input.value;
+            if(!text) return;
+
+            const msgData = {
+                sender: currentUser.name,
+                recipient: selectedTarget, // 'ALL' or specific username
+                text: text,
+                timestamp: Date.now()
+            };
+
+            // Push to Firebase
+            db.ref(`rooms/${currentUser.room}/messages`).push(msgData);
+            input.value = "";
+        }
+
+        function listenForMessages() {
+            const msgsDiv = document.getElementById("messages");
+
+            db.ref(`rooms/${currentUser.room}/messages`).on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                let shouldDisplay = false;
+
+                // --- LOGIC: WHO SEES WHAT? ---
+                
+                // 1. If I am the Teacher, I see EVERYTHING.
+                if (currentUser.role === 'teacher') {
+                    shouldDisplay = true;
+                } 
+                // 2. If I am the Sender, I see it.
+                else if (msg.sender === currentUser.name) {
+                    shouldDisplay = true;
+                }
+                // 3. If it is a Broadcast (ALL), everyone sees it.
+                else if (msg.recipient === 'ALL') {
+                    shouldDisplay = true;
+                }
+                // 4. If it is sent specifically TO ME, I see it.
+                else if (msg.recipient === currentUser.name) {
+                    shouldDisplay = true;
+                }
+
+                if (shouldDisplay) {
+                    const msgDiv = document.createElement("div");
+                    const isPrivate = msg.recipient !== 'ALL';
+                    
+                    msgDiv.className = isPrivate ? "message private" : "message";
+                    
+                    let metaText = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}`;
+                    if(isPrivate) metaText += ` -> ${msg.recipient}`;
+
+                    msgDiv.innerHTML = `
+                        <div class="timestamp">${metaText}</div>
+                        <div>${msg.text}</div>
+                    `;
+                    msgsDiv.appendChild(msgDiv);
+                    
+                    // Auto scroll to bottom
+                    msgsDiv.scrollTop = msgsDiv.scrollHeight;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
