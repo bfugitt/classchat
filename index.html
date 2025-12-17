@@ -40,8 +40,22 @@
         
         /* Message Feed */
         #msg-feed { flex-grow: 1; overflow-y: scroll; padding: 10px; }
+        
+        /* Message Styles */
         .msg { margin-bottom: 8px; padding: 5px; border-left: 3px solid #0f0; word-wrap: break-word;}
+        
+        /* Private DM Style */
         .msg.private { border-left-color: #ff00ff; color: #ff00ff; }
+        
+        /* --- NEW: ADMIN STYLE --- */
+        .msg.admin { 
+            border-left-color: #ff0;     /* Yellow Border */
+            color: #ff0;                 /* Yellow Text */
+            font-weight: bold;           /* Bold */
+            font-size: 1.1em;            /* Slightly larger */
+            background: rgba(255, 255, 0, 0.1); /* Subtle highlight background */
+        }
+
         .msg-meta { font-size: 0.75em; opacity: 0.7; margin-bottom: 2px; }
 
         /* User List Items */
@@ -356,11 +370,18 @@
                     const feed = document.getElementById("msg-feed");
                     const div = document.createElement("div");
                     const isPrivate = msg.recipient !== 'ALL';
+                    const isAdmin = msg.role === 'teacher'; // Check role from message data
                     
-                    div.className = isPrivate ? "msg private" : "msg";
+                    // Construct Class String
+                    let classes = "msg";
+                    if (isPrivate) classes += " private";
+                    if (isAdmin) classes += " admin";
+
+                    div.className = classes;
                     
                     let meta = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}`;
                     if(isPrivate) meta += ` -> ${msg.recipient}`;
+                    if(isAdmin) meta = `[ADMIN BROADCAST] ${msg.sender}`;
 
                     div.innerHTML = `<div class="msg-meta">${meta}</div><div>${msg.text}</div>`;
                     feed.appendChild(div);
@@ -376,6 +397,7 @@
 
             db.ref(`rooms/${currentUser.room}/messages`).push({
                 sender: currentUser.name,
+                role: currentUser.role, // Important: Sending role with message
                 recipient: selectedTarget,
                 text: text,
                 timestamp: Date.now()
