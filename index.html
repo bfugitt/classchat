@@ -5,56 +5,98 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Classroom OS Link</title>
     <style>
-        body { font-family: monospace; background: #222; color: #0f0; padding: 20px; }
-        #login-screen, #app-screen { max-width: 800px; margin: 0 auto; border: 1px solid #0f0; padding: 20px; }
-        input, select, button { background: #000; color: #0f0; border: 1px solid #0f0; padding: 10px; margin: 5px 0; width: 100%; font-family: monospace; }
+        body { font-family: 'Courier New', monospace; background: #222; color: #0f0; padding: 20px; }
+        
+        /* Layout & Utilities */
+        .container { max-width: 800px; margin: 0 auto; border: 1px solid #0f0; padding: 20px; position: relative; }
+        .hidden { display: none !important; }
+        .btn-danger { border-color: #f00; color: #f00; }
+        .btn-danger:hover { background: #f00; color: #000; }
+        
+        /* Inputs */
+        input, select, button { 
+            background: #000; color: #0f0; border: 1px solid #0f0; 
+            padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box;
+            font-family: inherit; font-size: 1rem;
+        }
         button:hover { background: #0f0; color: #000; cursor: pointer; }
-        
+        input:disabled { border-color: #555; color: #777; cursor: not-allowed; }
+
+        /* Header */
+        #top-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #0f0; padding-bottom: 10px; margin-bottom: 10px;}
+
         /* Chat Layout */
-        #chat-container { display: flex; height: 400px; border-top: 1px solid #0f0; margin-top: 20px; }
-        #user-list { width: 30%; border-right: 1px solid #0f0; overflow-y: scroll; padding: 10px; }
-        #messages { width: 70%; overflow-y: scroll; padding: 10px; display: flex; flex-direction: column; }
+        #chat-interface { display: flex; height: 400px; margin-top: 10px; border: 1px solid #0f0; }
+        #user-sidebar { width: 30%; border-right: 1px solid #0f0; background: #111; display: flex; flex-direction: column; }
+        #message-area { width: 70%; display: flex; flex-direction: column; background: #000; }
         
-        .message { margin-bottom: 10px; padding: 5px; border-left: 2px solid #0f0; }
-        .message.private { border-left: 2px solid #ff00ff; color: #ff00ff; } /* Distinct color for DMs */
-        .timestamp { font-size: 0.8em; opacity: 0.7; }
-        
-        .user-item { cursor: pointer; padding: 5px; }
-        .user-item:hover { background: #0f0; color: #000; }
+        /* Message Feed */
+        #msg-feed { flex-grow: 1; overflow-y: scroll; padding: 10px; }
+        .msg { margin-bottom: 8px; padding: 5px; border-left: 3px solid #0f0; word-wrap: break-word;}
+        .msg.private { border-left-color: #ff00ff; color: #ff00ff; }
+        .msg-meta { font-size: 0.75em; opacity: 0.7; margin-bottom: 2px; }
+
+        /* User List Items */
+        .user-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #333; }
+        .user-item:hover { background: #333; }
         .user-item.selected { background: #0f0; color: #000; font-weight: bold; }
         
-        .hidden { display: none !important; }
+        /* Input Area at bottom */
+        #input-area { display: flex; border-top: 1px solid #0f0; }
+        #msg-input { border: none; flex-grow: 1; }
+        #send-btn { width: auto; border: none; border-left: 1px solid #0f0; }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
-        <h2>>> SYSTEM LOGIN</h2>
-        <input type="text" id="username" placeholder="Enter Codename (Name)">
-        <input type="text" id="room-code" placeholder="Enter Frequency (Room Code)">
-        <select id="role">
-            <option value="student">Role: Student</option>
-            <option value="teacher">Role: Teacher (Admin)</option>
-        </select>
-        <button onclick="login()">CONNECT</button>
-    </div>
+    <div class="container">
+        <div id="login-screen">
+            <h2 style="text-align: center;">>> SYSTEM ACCESS</h2>
+            
+            <div id="login-form">
+                <label>IDENTIFICATION (Name):</label>
+                <input type="text" id="username" placeholder="Enter Name">
+                
+                <label>FREQUENCY (Room Code):</label>
+                <input type="text" id="room-code" placeholder="Enter Room">
+                
+                <div id="role-container" class="hidden">
+                    <label>ACCESS LEVEL:</label>
+                    <select id="role-select">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher (Admin)</option>
+                    </select>
+                </div>
 
-    <div id="app-screen" class="hidden">
-        <h2 id="status-bar">>> CONNECTED: <span id="display-room"></span></h2>
-        <p>Logged in as: <span id="display-name"></span></p>
-        
-        <div style="background: #111; padding: 10px; border: 1px dashed #0f0;">
-            <label>Targeting: <span id="target-display" style="font-weight:bold;">ALL (Broadcast)</span></label>
-            <input type="text" id="msg-input" placeholder="Type message data...">
-            <button onclick="sendMessage()">TRANSMIT</button>
+                <button onclick="login()" style="margin-top: 20px;">INITIALIZE CONNECTION</button>
+            </div>
         </div>
 
-        <div id="chat-container">
-            <div id="user-list">
-                <div class="user-item selected" onclick="selectUser('ALL')">> BROADCAST (ALL)</div>
+        <div id="app-screen" class="hidden">
+            <div id="top-bar">
+                <span>FREQ: <b id="display-room"></b> | USER: <b id="display-name"></b></span>
+                <button onclick="signOut()" class="btn-danger" style="width: auto; padding: 5px 15px;">DISCONNECT</button>
+            </div>
+            
+            <div style="background: #111; padding: 5px; text-align: center; border: 1px dashed #555;">
+                Target: <span id="target-display" style="font-weight:bold; color: #fff;">ALL (Broadcast)</span>
+            </div>
+
+            <div id="chat-interface">
+                <div id="user-sidebar">
+                    <div class="user-item selected" onclick="selectUser('ALL')">> BROADCAST ALL</div>
+                    <div id="dynamic-user-list"></div>
                 </div>
-            <div id="messages">
+
+                <div id="message-area">
+                    <div id="msg-feed"></div>
+                    
+                    <div id="input-area">
+                        <input type="text" id="msg-input" placeholder="Enter data packet..." onkeydown="if(event.key==='Enter') sendMessage()">
+                        <button id="send-btn" onclick="sendMessage()">SEND</button>
+                    </div>
                 </div>
+            </div>
         </div>
     </div>
 
@@ -62,149 +104,186 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
-        // --- CONFIGURATION ---
-        // TODO: Replace this object with YOUR actual Firebase config from the console
-const firebaseConfig = {
-    apiKey: "AIzaSyA_5r6DAUKkYv5TFP9XM3K3SnRBtmdUS0g",
-    authDomain: "classroom-chat-756d5.firebaseapp.com",
-    databaseURL: "https://classroom-chat-756d5-default-rtdb.firebaseio.com",
-    projectId: "classroom-chat-756d5",
-    storageBucket: "classroom-chat-756d5.firebasestorage.app",
-    messagingSenderId: "805467042314",
-    appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
-    measurementId: "G-04X2N5MR75"
-  };
+        // --- TODO: PASTE YOUR FIREBASE CONFIG HERE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-YOUR-API-KEY-HERE",
+            authDomain: "your-project.firebaseapp.com",
+            databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abc123456"
+        };
 
-        // Initialize Firebase
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // State Variables
-        let currentUser = { name: "", room: "", role: "" };
-        let selectedTarget = "ALL"; // Who are we talking to?
+        // --- STATE ---
+        let currentUser = { name: "", room: "", role: "student" }; // Default to student
+        let selectedTarget = "ALL";
+        let dbListeners = []; // To store listeners so we can detach them on logout
 
-        // --- FUNCTIONS ---
+        // --- ON LOAD: PARSE URL ---
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // 1. Handle Room Code
+            const roomParam = urlParams.get('room');
+            if (roomParam) {
+                const roomInput = document.getElementById("room-code");
+                roomInput.value = roomParam;
+                roomInput.disabled = true; // Lock it
+            }
+
+            // 2. Handle Teacher Role
+            const isTeacher = urlParams.get('teacher') === 'true';
+            if (isTeacher) {
+                // If teacher, show the role selector (or just force it)
+                // For safety, let's just force it to teacher internally
+                currentUser.role = 'teacher';
+                // Optional: Show visual indicator they are in admin mode
+                document.querySelector('h2').innerText += " (ADMIN MODE)";
+            } else {
+                // If student, ensure role is student
+                currentUser.role = 'student';
+            }
+        };
+
+        // --- CORE FUNCTIONS ---
 
         function login() {
             const name = document.getElementById("username").value.trim();
             const room = document.getElementById("room-code").value.trim();
-            const role = document.getElementById("role").value;
+            
+            if(!name || !room) return alert("Credentials missing.");
 
-            if(!name || !room) return alert("Credentials required.");
-
-            currentUser = { name, room, role };
+            currentUser.name = name;
+            currentUser.room = room;
 
             // UI Switch
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("app-screen").classList.remove("hidden");
             document.getElementById("display-room").innerText = room;
-            document.getElementById("display-name").innerText = name + " (" + role + ")";
+            
+            const roleDisplay = currentUser.role === 'teacher' ? "ADMIN" : "STUDENT";
+            document.getElementById("display-name").innerText = `${name} [${roleDisplay}]`;
 
-            // Register Presence in Database
-            db.ref(`rooms/${room}/users/${name}`).set({
-                role: role,
-                lastSeen: Date.now()
-            });
+            // 1. Add User to DB
+            // We use onDisconnect().remove() so they disappear from the list if they close the tab
+            const userRef = db.ref(`rooms/${room}/users/${name}`);
+            userRef.set({ role: currentUser.role, lastSeen: Date.now() });
+            userRef.onDisconnect().remove();
 
-            // Start Listeners
+            // 2. Start Listeners
             listenForMessages();
             listenForUsers();
         }
 
-        function listenForUsers() {
-            const userListDiv = document.getElementById("user-list");
+        function signOut() {
+            // Remove user from DB immediately
+            if(currentUser.name && currentUser.room) {
+                db.ref(`rooms/${currentUser.room}/users/${currentUser.name}`).remove();
+            }
+
+            // Turn off listeners to prevent ghost data
+            dbListeners.forEach(ref => ref.off());
+            dbListeners = [];
+
+            // Reset UI
+            document.getElementById("msg-feed").innerHTML = "";
+            document.getElementById("dynamic-user-list").innerHTML = "";
+            document.getElementById("app-screen").classList.add("hidden");
+            document.getElementById("login-screen").classList.remove("hidden");
             
-            // Listen for new users appearing in this room
-            db.ref(`rooms/${currentUser.room}/users`).on('value', (snapshot) => {
-                // Clear list (except Broadcast)
-                userListDiv.innerHTML = '<div class="user-item selected" onclick="selectUser(\'ALL\')">> BROADCAST (ALL)</div>';
+            // Clear inputs (optional)
+            document.getElementById("username").value = "";
+            // We do NOT clear room if it was locked by URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.get('room')) {
+                document.getElementById("room-code").value = "";
+            }
+            
+            selectedTarget = "ALL";
+            document.getElementById("target-display").innerText = "ALL (Broadcast)";
+        }
+
+        function listenForUsers() {
+            const usersRef = db.ref(`rooms/${currentUser.room}/users`);
+            dbListeners.push(usersRef); // Track listener
+
+            usersRef.on('value', (snapshot) => {
+                const listDiv = document.getElementById("dynamic-user-list");
+                listDiv.innerHTML = ""; // Wipe list
                 
-                snapshot.forEach((childSnapshot) => {
-                    const userName = childSnapshot.key;
-                    if(userName !== currentUser.name) { // Don't show myself
+                snapshot.forEach((child) => {
+                    const uName = child.key;
+                    const uData = child.val();
+                    
+                    if(uName !== currentUser.name) {
                         const div = document.createElement("div");
                         div.className = "user-item";
-                        div.innerText = `> ${userName}`;
-                        div.onclick = () => selectUser(userName);
-                        userListDiv.appendChild(div);
+                        // Mark teachers visually
+                        const prefix = uData.role === 'teacher' ? "[ADMIN] " : "> ";
+                        div.innerText = prefix + uName;
+                        
+                        // Click to DM
+                        div.onclick = () => {
+                            selectedTarget = uName;
+                            document.getElementById("target-display").innerText = uName;
+                            // Visual highlight logic
+                            document.querySelectorAll(".user-item").forEach(el => el.classList.remove("selected"));
+                            div.classList.add("selected");
+                        };
+                        listDiv.appendChild(div);
                     }
                 });
             });
         }
 
-        function selectUser(targetName) {
-            selectedTarget = targetName;
-            document.getElementById("target-display").innerText = targetName;
-            
-            // Visual feedback on list
-            document.querySelectorAll(".user-item").forEach(el => el.classList.remove("selected"));
-            event.target.classList.add("selected");
+        function listenForMessages() {
+            const msgsRef = db.ref(`rooms/${currentUser.room}/messages`);
+            dbListeners.push(msgsRef);
+
+            // Limit to last 100 messages to prevent lagging
+            msgsRef.limitToLast(100).on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                let show = false;
+
+                // VISIBILITY LOGIC
+                if (currentUser.role === 'teacher') show = true; // Teachers see all
+                else if (msg.sender === currentUser.name) show = true; // I sent it
+                else if (msg.recipient === 'ALL') show = true; // Public
+                else if (msg.recipient === currentUser.name) show = true; // DM to me
+
+                if (show) {
+                    const feed = document.getElementById("msg-feed");
+                    const div = document.createElement("div");
+                    const isPrivate = msg.recipient !== 'ALL';
+                    
+                    div.className = isPrivate ? "msg private" : "msg";
+                    
+                    let meta = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}`;
+                    if(isPrivate) meta += ` -> ${msg.recipient}`;
+
+                    div.innerHTML = `<div class="msg-meta">${meta}</div><div>${msg.text}</div>`;
+                    feed.appendChild(div);
+                    feed.scrollTop = feed.scrollHeight; // Auto-scroll
+                }
+            });
         }
 
         function sendMessage() {
             const input = document.getElementById("msg-input");
-            const text = input.value;
+            const text = input.value.trim();
             if(!text) return;
 
-            const msgData = {
+            db.ref(`rooms/${currentUser.room}/messages`).push({
                 sender: currentUser.name,
-                recipient: selectedTarget, // 'ALL' or specific username
+                recipient: selectedTarget,
                 text: text,
                 timestamp: Date.now()
-            };
-
-            // Push to Firebase
-            db.ref(`rooms/${currentUser.room}/messages`).push(msgData);
-            input.value = "";
-        }
-
-        function listenForMessages() {
-            const msgsDiv = document.getElementById("messages");
-
-            db.ref(`rooms/${currentUser.room}/messages`).on('child_added', (snapshot) => {
-                const msg = snapshot.val();
-                let shouldDisplay = false;
-
-                // --- LOGIC: WHO SEES WHAT? ---
-                
-                // 1. If I am the Teacher, I see EVERYTHING.
-                if (currentUser.role === 'teacher') {
-                    shouldDisplay = true;
-                } 
-                // 2. If I am the Sender, I see it.
-                else if (msg.sender === currentUser.name) {
-                    shouldDisplay = true;
-                }
-                // 3. If it is a Broadcast (ALL), everyone sees it.
-                else if (msg.recipient === 'ALL') {
-                    shouldDisplay = true;
-                }
-                // 4. If it is sent specifically TO ME, I see it.
-                else if (msg.recipient === currentUser.name) {
-                    shouldDisplay = true;
-                }
-
-                if (shouldDisplay) {
-                    const msgDiv = document.createElement("div");
-                    const isPrivate = msg.recipient !== 'ALL';
-                    
-                    msgDiv.className = isPrivate ? "message private" : "message";
-                    
-                    let metaText = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}`;
-                    if(isPrivate) metaText += ` -> ${msg.recipient}`;
-
-                    msgDiv.innerHTML = `
-                        <div class="timestamp">${metaText}</div>
-                        <div>${msg.text}</div>
-                    `;
-                    msgsDiv.appendChild(msgDiv);
-                    
-                    // Auto scroll to bottom
-                    msgsDiv.scrollTop = msgsDiv.scrollHeight;
-                }
             });
+            input.value = "";
         }
     </script>
 </body>
