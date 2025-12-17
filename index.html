@@ -12,6 +12,8 @@
         .hidden { display: none !important; }
         .btn-danger { border-color: #f00; color: #f00; }
         .btn-danger:hover { background: #f00; color: #000; }
+        .btn-google { border-color: #4285F4; color: #4285F4; margin-bottom: 15px; }
+        .btn-google:hover { background: #4285F4; color: #fff; }
         
         /* Inputs */
         input, select, button { 
@@ -55,13 +57,18 @@
             <h2 style="text-align: center;">>> SYSTEM ACCESS</h2>
             
             <div id="login-form">
+                <!-- Google Auth Button -->
+                <button onclick="googleLogin()" class="btn-google">
+                    [ G ] USE GOOGLE IDENTITY
+                </button>
+                <div style="text-align: center; margin: 10px 0;">-- OR MANUAL OVERRIDE --</div>
+
                 <label>IDENTIFICATION (Name):</label>
                 <input type="text" id="username" placeholder="Enter Name">
                 
                 <label>FREQUENCY (Room Code):</label>
                 <input type="text" id="room-code" placeholder="Enter Room">
                 
-                <!-- This dropdown is now controlled by JS -->
                 <div id="role-container" class="hidden">
                     <label>ACCESS LEVEL:</label>
                     <select id="role-select">
@@ -105,36 +112,37 @@
         </div>
     </div>
 
-    <!-- FIREBASE SDK -->
+    <!-- FIREBASE SDK (Added Auth) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
         // =================================================================
-        // PASTE YOUR FIREBASE CONFIGURATION HERE
-        // Go to Firebase Console -> Project Settings -> General -> Your Apps
+        // FIREBASE CONFIGURATION (PRESERVED)
         // =================================================================
-     const firebaseConfig = {
-    apiKey: "AIzaSyA_5r6DAUKkYv5TFP9XM3K3SnRBtmdUS0g",
-    authDomain: "classroom-chat-756d5.firebaseapp.com",
-    databaseURL: "https://classroom-chat-756d5-default-rtdb.firebaseio.com",
-    projectId: "classroom-chat-756d5",
-    storageBucket: "classroom-chat-756d5.firebasestorage.app",
-    messagingSenderId: "805467042314",
-    appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
-    measurementId: "G-04X2N5MR75"
-  };
+        const firebaseConfig = {
+            apiKey: "AIzaSyA_5r6DAUKkYv5TFP9XM3K3SnRBtmdUS0g",
+            authDomain: "classroom-chat-756d5.firebaseapp.com",
+            databaseURL: "https://classroom-chat-756d5-default-rtdb.firebaseio.com",
+            projectId: "classroom-chat-756d5",
+            storageBucket: "classroom-chat-756d5.firebasestorage.app",
+            messagingSenderId: "805467042314",
+            appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
+            measurementId: "G-04X2N5MR75"
+        };
         // =================================================================
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const auth = firebase.auth();
 
         // --- STATE ---
-        let currentUser = { name: "", room: "", role: "student" }; // Default to student
+        let currentUser = { name: "", room: "", role: "student" }; 
         let selectedTarget = "ALL";
-        let dbListeners = []; // To store listeners so we can detach them on logout
+        let dbListeners = [];
 
-        // --- ON LOAD: PARSE URL ---
+        // --- ON LOAD: PARSE URL & CHECK AUTH ---
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             
@@ -143,22 +151,43 @@
             if (roomParam) {
                 const roomInput = document.getElementById("room-code");
                 roomInput.value = roomParam;
-                roomInput.disabled = true; // Lock it
+                roomInput.disabled = true;
             }
 
             // 2. Handle Teacher Role
             const isTeacher = urlParams.get('teacher') === 'true';
             if (isTeacher) {
-                // If teacher, show the role selector (or just force it)
-                // For safety, let's just force it to teacher internally
                 currentUser.role = 'teacher';
-                // Optional: Show visual indicator they are in admin mode
                 document.querySelector('h2').innerText += " (ADMIN MODE)";
-            } else {
-                // If student, ensure role is student
-                currentUser.role = 'student';
             }
+
+            // 3. Check for existing Google Login (Auto-fill if found)
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log("User detected:", user.displayName);
+                    fillIdentity(user.displayName);
+                }
+            });
         };
+
+        // --- AUTH FUNCTIONS ---
+
+        function googleLogin() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    // This triggers the onAuthStateChanged above automatically
+                }).catch((error) => {
+                    alert("Auth Failed: " + error.message);
+                });
+        }
+
+        function fillIdentity(name) {
+            const nameInput = document.getElementById("username");
+            nameInput.value = name;
+            nameInput.disabled = true; // Lock it so they can't change it
+            nameInput.style.borderColor = "#4285F4"; // Blue border to show trusted
+        }
 
         // --- CORE FUNCTIONS ---
 
@@ -180,7 +209,6 @@
             document.getElementById("display-name").innerText = `${name} [${roleDisplay}]`;
 
             // 1. Add User to DB
-            // We use onDisconnect().remove() so they disappear from the list if they close the tab
             const userRef = db.ref(`rooms/${room}/users/${name}`);
             userRef.set({ role: currentUser.role, lastSeen: Date.now() });
             userRef.onDisconnect().remove();
@@ -191,12 +219,15 @@
         }
 
         function signOut() {
-            // Remove user from DB immediately
+            // Remove user from DB
             if(currentUser.name && currentUser.room) {
                 db.ref(`rooms/${currentUser.room}/users/${currentUser.name}`).remove();
             }
+            
+            // Sign out of Google too
+            auth.signOut();
 
-            // Turn off listeners to prevent ghost data
+            // Detach listeners
             dbListeners.forEach(ref => ref.off());
             dbListeners = [];
 
@@ -206,9 +237,12 @@
             document.getElementById("app-screen").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");
             
-            // Clear inputs (optional)
-            document.getElementById("username").value = "";
-            // We do NOT clear room if it was locked by URL
+            // Reset Inputs
+            const nameInput = document.getElementById("username");
+            nameInput.value = "";
+            nameInput.disabled = false; // Unlock
+            nameInput.style.borderColor = "#0f0";
+
             const urlParams = new URLSearchParams(window.location.search);
             if (!urlParams.get('room')) {
                 document.getElementById("room-code").value = "";
@@ -220,11 +254,11 @@
 
         function listenForUsers() {
             const usersRef = db.ref(`rooms/${currentUser.room}/users`);
-            dbListeners.push(usersRef); // Track listener
+            dbListeners.push(usersRef);
 
             usersRef.on('value', (snapshot) => {
                 const listDiv = document.getElementById("dynamic-user-list");
-                listDiv.innerHTML = ""; // Wipe list
+                listDiv.innerHTML = "";
                 
                 snapshot.forEach((child) => {
                     const uName = child.key;
@@ -233,15 +267,12 @@
                     if(uName !== currentUser.name) {
                         const div = document.createElement("div");
                         div.className = "user-item";
-                        // Mark teachers visually
                         const prefix = uData.role === 'teacher' ? "[ADMIN] " : "> ";
                         div.innerText = prefix + uName;
                         
-                        // Click to DM
                         div.onclick = () => {
                             selectedTarget = uName;
                             document.getElementById("target-display").innerText = uName;
-                            // Visual highlight logic
                             document.querySelectorAll(".user-item").forEach(el => el.classList.remove("selected"));
                             div.classList.add("selected");
                         };
@@ -255,16 +286,14 @@
             const msgsRef = db.ref(`rooms/${currentUser.room}/messages`);
             dbListeners.push(msgsRef);
 
-            // Limit to last 100 messages to prevent lagging
             msgsRef.limitToLast(100).on('child_added', (snapshot) => {
                 const msg = snapshot.val();
                 let show = false;
 
-                // VISIBILITY LOGIC
-                if (currentUser.role === 'teacher') show = true; // Teachers see all
-                else if (msg.sender === currentUser.name) show = true; // I sent it
-                else if (msg.recipient === 'ALL') show = true; // Public
-                else if (msg.recipient === currentUser.name) show = true; // DM to me
+                if (currentUser.role === 'teacher') show = true; 
+                else if (msg.sender === currentUser.name) show = true; 
+                else if (msg.recipient === 'ALL') show = true; 
+                else if (msg.recipient === currentUser.name) show = true; 
 
                 if (show) {
                     const feed = document.getElementById("msg-feed");
@@ -278,7 +307,7 @@
 
                     div.innerHTML = `<div class="msg-meta">${meta}</div><div>${msg.text}</div>`;
                     feed.appendChild(div);
-                    feed.scrollTop = feed.scrollHeight; // Auto-scroll
+                    feed.scrollTop = feed.scrollHeight; 
                 }
             });
         }
