@@ -50,6 +50,7 @@
 <body>
 
     <div class="container">
+        <!-- 1. LOGIN SCREEN -->
         <div id="login-screen">
             <h2 style="text-align: center;">>> SYSTEM ACCESS</h2>
             
@@ -60,6 +61,7 @@
                 <label>FREQUENCY (Room Code):</label>
                 <input type="text" id="room-code" placeholder="Enter Room">
                 
+                <!-- This dropdown is now controlled by JS -->
                 <div id="role-container" class="hidden">
                     <label>ACCESS LEVEL:</label>
                     <select id="role-select">
@@ -72,6 +74,7 @@
             </div>
         </div>
 
+        <!-- 2. MAIN APP SCREEN -->
         <div id="app-screen" class="hidden">
             <div id="top-bar">
                 <span>FREQ: <b id="display-room"></b> | USER: <b id="display-name"></b></span>
@@ -83,11 +86,13 @@
             </div>
 
             <div id="chat-interface">
+                <!-- Left Sidebar: Users -->
                 <div id="user-sidebar">
                     <div class="user-item selected" onclick="selectUser('ALL')">> BROADCAST ALL</div>
                     <div id="dynamic-user-list"></div>
                 </div>
 
+                <!-- Right Side: Messages -->
                 <div id="message-area">
                     <div id="msg-feed"></div>
                     
@@ -100,20 +105,26 @@
         </div>
     </div>
 
+    <!-- FIREBASE SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
-        // --- TODO: PASTE YOUR FIREBASE CONFIG HERE ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyD-YOUR-API-KEY-HERE",
-            authDomain: "your-project.firebaseapp.com",
-            databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-            projectId: "your-project",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abc123456"
-        };
+        // =================================================================
+        // PASTE YOUR FIREBASE CONFIGURATION HERE
+        // Go to Firebase Console -> Project Settings -> General -> Your Apps
+        // =================================================================
+     const firebaseConfig = {
+    apiKey: "AIzaSyA_5r6DAUKkYv5TFP9XM3K3SnRBtmdUS0g",
+    authDomain: "classroom-chat-756d5.firebaseapp.com",
+    databaseURL: "https://classroom-chat-756d5-default-rtdb.firebaseio.com",
+    projectId: "classroom-chat-756d5",
+    storageBucket: "classroom-chat-756d5.firebasestorage.app",
+    messagingSenderId: "805467042314",
+    appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
+    measurementId: "G-04X2N5MR75"
+  };
+        // =================================================================
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
