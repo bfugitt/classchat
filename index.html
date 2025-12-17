@@ -43,18 +43,24 @@
         
         /* Message Styles */
         .msg { margin-bottom: 8px; padding: 5px; border-left: 3px solid #0f0; word-wrap: break-word;}
-        
-        /* Private DM Style */
         .msg.private { border-left-color: #ff00ff; color: #ff00ff; }
-        
-        /* --- NEW: ADMIN STYLE --- */
         .msg.admin { 
-            border-left-color: #ff0;     /* Yellow Border */
-            color: #ff0;                 /* Yellow Text */
-            font-weight: bold;           /* Bold */
-            font-size: 1.1em;            /* Slightly larger */
-            background: rgba(255, 255, 0, 0.1); /* Subtle highlight background */
+            border-left-color: #ff0;     
+            color: #ff0;                 
+            font-weight: bold;           
+            font-size: 1.1em;            
+            background: rgba(255, 255, 0, 0.1); 
         }
+
+        /* --- NEW: IMAGE STYLES --- */
+        .chat-image {
+            max-width: 100%;
+            max-height: 300px;
+            border: 1px dashed #0f0;
+            margin-top: 5px;
+            display: block;
+        }
+        .msg.admin .chat-image { border-color: #ff0; } /* Yellow border for admin images */
 
         .msg-meta { font-size: 0.75em; opacity: 0.7; margin-bottom: 2px; }
 
@@ -66,7 +72,11 @@
         /* Input Area at bottom */
         #input-area { display: flex; border-top: 1px solid #0f0; }
         #msg-input { border: none; flex-grow: 1; }
-        #send-btn { width: auto; border: none; border-left: 1px solid #0f0; }
+        
+        /* Buttons in Input Area */
+        #send-btn { width: auto; border: none; border-left: 1px solid #0f0; padding: 0 20px;}
+        #upload-btn { width: auto; border: none; border-left: 1px solid #0f0; font-size: 1.2em; padding: 0 15px; }
+
     </style>
 </head>
 <body>
@@ -131,7 +141,14 @@
                     <div id="msg-feed"></div>
                     
                     <div id="input-area">
+                        <!-- Hidden File Input -->
+                        <input type="file" id="file-input" accept="image/*" class="hidden" onchange="handleFileSelect()">
+                        
                         <input type="text" id="msg-input" placeholder="Enter data packet..." onkeydown="if(event.key==='Enter') sendMessage()">
+                        
+                        <!-- Camera Button -->
+                        <button id="upload-btn" onclick="document.getElementById('file-input').click()" title="Transmit Image">📷</button>
+                        
                         <button id="send-btn" onclick="sendMessage()">SEND</button>
                     </div>
                 </div>
@@ -186,26 +203,20 @@
             if (isTeacher) {
                 currentUser.role = 'teacher';
                 document.querySelector('h2').innerText += " (ADMIN MODE)";
-                // Show manual controls for teacher just in case
                 toggleManual();
             }
 
-            // 3. Listen for Auth State (Auto-Detect Google Login)
+            // 3. Listen for Auth State
             auth.onAuthStateChanged((user) => {
                 const btn = document.getElementById("google-btn");
                 if (user) {
-                    // User is signed in.
                     console.log("User detected:", user.displayName);
                     authUserObject = user;
-                    // Change button text to indicate readiness
                     btn.innerText = `[ G ] CONTINUE AS ${user.displayName.toUpperCase()}`;
                     btn.style.borderColor = "#0f0";
                     btn.style.color = "#0f0";
-                    
-                    // Auto-fill hidden username just in case logic needs it
                     document.getElementById("username").value = user.displayName;
                 } else {
-                    // No user is signed in.
                     authUserObject = null;
                     btn.innerText = "[ G ] SIGN IN WITH GOOGLE";
                     btn.style.borderColor = "#4285F4";
@@ -230,15 +241,12 @@
             if(!room) return alert("Please enter a Frequency (Room Code) first.");
 
             if (authUserObject) {
-                // ALREADY AUTHENTICATED -> PROCEED TO LOGIN
                 document.getElementById("username").value = authUserObject.displayName;
                 login();
             } else {
-                // NOT AUTHENTICATED -> TRIGGER POPUP
                 const provider = new firebase.auth.GoogleAuthProvider();
                 auth.signInWithPopup(provider)
                     .then((result) => {
-                        // After successful sign-in, try to log in to room
                         authUserObject = result.user;
                         document.getElementById("username").value = result.user.displayName;
                         login();
@@ -249,31 +257,26 @@
             }
         }
 
-        // --- CORE LOGIN LOGIC ---
+        // --- LOGIN LOGIC ---
         function login() {
             const name = document.getElementById("username").value.trim();
             const room = document.getElementById("room-code").value.trim();
             
             if(!name || !room) return alert("Credentials missing.");
 
-            // CHECK: Does this room exist?
-            // If I am a student, I cannot create rooms.
             if (currentUser.role === 'student') {
                 db.ref(`rooms/${room}`).get().then((snapshot) => {
                     if (snapshot.exists()) {
-                        // Room exists, proceed
                         proceedToApp(name, room);
                     } else {
-                        // Room does NOT exist
                         alert("ACCESS DENIED: Room has not been opened by a Teacher yet.");
-                        return; // Stop here
+                        return;
                     }
                 }).catch((error) => {
                     console.error(error);
                     alert("Connection Error: " + error.message);
                 });
             } else {
-                // Teachers can create rooms
                 proceedToApp(name, room);
             }
         }
@@ -282,7 +285,6 @@
             currentUser.name = name;
             currentUser.room = room;
 
-            // UI Switch
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("app-screen").classList.remove("hidden");
             document.getElementById("display-room").innerText = room;
@@ -290,12 +292,10 @@
             const roleDisplay = currentUser.role === 'teacher' ? "ADMIN" : "STUDENT";
             document.getElementById("display-name").innerText = `${name} [${roleDisplay}]`;
 
-            // Register User Presence
             const userRef = db.ref(`rooms/${room}/users/${name}`);
             userRef.set({ role: currentUser.role, lastSeen: Date.now() });
             userRef.onDisconnect().remove();
 
-            // Start Listeners
             listenForMessages();
             listenForUsers();
         }
@@ -304,16 +304,9 @@
             if(currentUser.name && currentUser.room) {
                 db.ref(`rooms/${currentUser.room}/users/${currentUser.name}`).remove();
             }
-            
-            // We do NOT sign out of Google auth here automatically, 
-            // so they can rejoin easily. If you want full logout:
-            // auth.signOut(); 
-
-            // Detach listeners
             dbListeners.forEach(ref => ref.off());
             dbListeners = [];
-
-            // Reset UI
+            
             document.getElementById("msg-feed").innerHTML = "";
             document.getElementById("dynamic-user-list").innerHTML = "";
             document.getElementById("app-screen").classList.add("hidden");
@@ -353,6 +346,42 @@
             });
         }
 
+        // --- NEW: FILE HANDLING LOGIC ---
+        function handleFileSelect() {
+            const fileInput = document.getElementById("file-input");
+            const file = fileInput.files[0];
+            
+            if (file) {
+                // Safety Limit: 1MB (1,000,000 bytes)
+                // Base64 adds ~33% overhead, so this keeps DB writes safe
+                if (file.size > 1000000) {
+                    alert("FILE TOO LARGE. Max size is 1MB.");
+                    fileInput.value = ""; // Reset
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const base64Data = e.target.result;
+                    // Simple confirm dialog
+                    const confirmSend = confirm(`Transmit image: ${file.name}?`);
+                    if (confirmSend) {
+                        // Send message with IMAGE data
+                        db.ref(`rooms/${currentUser.room}/messages`).push({
+                            sender: currentUser.name,
+                            role: currentUser.role,
+                            recipient: selectedTarget,
+                            text: "", // Empty text for image-only message
+                            image: base64Data, // The image data
+                            timestamp: Date.now()
+                        });
+                    }
+                    fileInput.value = ""; // Reset input
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
         function listenForMessages() {
             const msgsRef = db.ref(`rooms/${currentUser.room}/messages`);
             dbListeners.push(msgsRef);
@@ -370,9 +399,8 @@
                     const feed = document.getElementById("msg-feed");
                     const div = document.createElement("div");
                     const isPrivate = msg.recipient !== 'ALL';
-                    const isAdmin = msg.role === 'teacher'; // Check role from message data
+                    const isAdmin = msg.role === 'teacher'; 
                     
-                    // Construct Class String
                     let classes = "msg";
                     if (isPrivate) classes += " private";
                     if (isAdmin) classes += " admin";
@@ -383,7 +411,19 @@
                     if(isPrivate) meta += ` -> ${msg.recipient}`;
                     if(isAdmin) meta = `[ADMIN BROADCAST] ${msg.sender}`;
 
-                    div.innerHTML = `<div class="msg-meta">${meta}</div><div>${msg.text}</div>`;
+                    // --- CONTENT RENDERING ---
+                    let contentHtml = "";
+                    
+                    // If image exists, render it
+                    if (msg.image) {
+                        contentHtml += `<img src="${msg.image}" class="chat-image">`;
+                    }
+                    // If text exists, render it
+                    if (msg.text) {
+                        contentHtml += `<div>${msg.text}</div>`;
+                    }
+
+                    div.innerHTML = `<div class="msg-meta">${meta}</div>${contentHtml}`;
                     feed.appendChild(div);
                     feed.scrollTop = feed.scrollHeight; 
                 }
@@ -397,7 +437,7 @@
 
             db.ref(`rooms/${currentUser.room}/messages`).push({
                 sender: currentUser.name,
-                role: currentUser.role, // Important: Sending role with message
+                role: currentUser.role, 
                 recipient: selectedTarget,
                 text: text,
                 timestamp: Date.now()
