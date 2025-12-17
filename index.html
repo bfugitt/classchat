@@ -12,7 +12,9 @@
         .hidden { display: none !important; }
         .btn-danger { border-color: #f00; color: #f00; }
         .btn-danger:hover { background: #f00; color: #000; }
-        .btn-google { border-color: #4285F4; color: #4285F4; margin-bottom: 15px; }
+        
+        /* Google Button Styling */
+        .btn-google { border-color: #4285F4; color: #4285F4; margin-bottom: 15px; font-weight: bold; padding: 15px; font-size: 1.1em; }
         .btn-google:hover { background: #4285F4; color: #fff; }
         
         /* Inputs */
@@ -23,6 +25,10 @@
         }
         button:hover { background: #0f0; color: #000; cursor: pointer; }
         input:disabled { border-color: #555; color: #777; cursor: not-allowed; }
+
+        /* Links */
+        .link-btn { color: #555; text-decoration: underline; cursor: pointer; font-size: 0.8em; display: block; text-align: center; margin-top: 10px; }
+        .link-btn:hover { color: #0f0; }
 
         /* Header */
         #top-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #0f0; padding-bottom: 10px; margin-bottom: 10px;}
@@ -57,27 +63,34 @@
             <h2 style="text-align: center;">>> SYSTEM ACCESS</h2>
             
             <div id="login-form">
-                <!-- Google Auth Button -->
-                <button onclick="googleLogin()" class="btn-google">
-                    [ G ] USE GOOGLE IDENTITY
-                </button>
-                <div style="text-align: center; margin: 10px 0;">-- OR MANUAL OVERRIDE --</div>
-
-                <label>IDENTIFICATION (Name):</label>
-                <input type="text" id="username" placeholder="Enter Name">
                 
                 <label>FREQUENCY (Room Code):</label>
                 <input type="text" id="room-code" placeholder="Enter Room">
-                
-                <div id="role-container" class="hidden">
-                    <label>ACCESS LEVEL:</label>
-                    <select id="role-select">
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher (Admin)</option>
-                    </select>
+
+                <div style="height: 20px;"></div>
+
+                <!-- Google Auth Button (Primary) -->
+                <button id="google-btn" onclick="handleGoogleFlow()" class="btn-google">
+                    [ G ] SIGN IN WITH GOOGLE
+                </button>
+
+                <!-- Hidden Manual Override -->
+                <div id="manual-login-area" class="hidden" style="border-top: 1px dashed #333; margin-top: 20px; padding-top: 10px;">
+                    <label>MANUAL ID (Name):</label>
+                    <input type="text" id="username" placeholder="Enter Name">
+                    
+                    <div id="role-container" class="hidden">
+                        <label>ACCESS LEVEL:</label>
+                        <select id="role-select">
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher (Admin)</option>
+                        </select>
+                    </div>
+
+                    <button onclick="login()">INITIALIZE CONNECTION</button>
                 </div>
 
-                <button onclick="login()" style="margin-top: 20px;">INITIALIZE CONNECTION</button>
+                <a class="link-btn" onclick="toggleManual()">Toggle Manual Override</a>
             </div>
         </div>
 
@@ -112,7 +125,7 @@
         </div>
     </div>
 
-    <!-- FIREBASE SDK (Added Auth) -->
+    <!-- FIREBASE SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -131,7 +144,6 @@
             appId: "1:805467042314:web:c70e68f316c3a76d73a5f3",
             measurementId: "G-04X2N5MR75"
         };
-        // =================================================================
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
@@ -141,8 +153,9 @@
         let currentUser = { name: "", room: "", role: "student" }; 
         let selectedTarget = "ALL";
         let dbListeners = [];
+        let authUserObject = null; // Stores the actual Google User object
 
-        // --- ON LOAD: PARSE URL & CHECK AUTH ---
+        // --- ON LOAD ---
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             
@@ -159,44 +172,99 @@
             if (isTeacher) {
                 currentUser.role = 'teacher';
                 document.querySelector('h2').innerText += " (ADMIN MODE)";
+                // Show manual controls for teacher just in case
+                toggleManual();
             }
 
-            // 3. Check for existing Google Login (Auto-fill if found)
+            // 3. Listen for Auth State (Auto-Detect Google Login)
             auth.onAuthStateChanged((user) => {
+                const btn = document.getElementById("google-btn");
                 if (user) {
+                    // User is signed in.
                     console.log("User detected:", user.displayName);
-                    fillIdentity(user.displayName);
+                    authUserObject = user;
+                    // Change button text to indicate readiness
+                    btn.innerText = `[ G ] CONTINUE AS ${user.displayName.toUpperCase()}`;
+                    btn.style.borderColor = "#0f0";
+                    btn.style.color = "#0f0";
+                    
+                    // Auto-fill hidden username just in case logic needs it
+                    document.getElementById("username").value = user.displayName;
+                } else {
+                    // No user is signed in.
+                    authUserObject = null;
+                    btn.innerText = "[ G ] SIGN IN WITH GOOGLE";
+                    btn.style.borderColor = "#4285F4";
+                    btn.style.color = "#4285F4";
                 }
             });
         };
 
-        // --- AUTH FUNCTIONS ---
-
-        function googleLogin() {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider)
-                .then((result) => {
-                    // This triggers the onAuthStateChanged above automatically
-                }).catch((error) => {
-                    alert("Auth Failed: " + error.message);
-                });
+        // --- UI FUNCTIONS ---
+        function toggleManual() {
+            const area = document.getElementById("manual-login-area");
+            if (area.classList.contains("hidden")) {
+                area.classList.remove("hidden");
+            } else {
+                area.classList.add("hidden");
+            }
         }
 
-        function fillIdentity(name) {
-            const nameInput = document.getElementById("username");
-            nameInput.value = name;
-            nameInput.disabled = true; // Lock it so they can't change it
-            nameInput.style.borderColor = "#4285F4"; // Blue border to show trusted
+        // --- AUTH FLOW ---
+        function handleGoogleFlow() {
+            const room = document.getElementById("room-code").value.trim();
+            if(!room) return alert("Please enter a Frequency (Room Code) first.");
+
+            if (authUserObject) {
+                // ALREADY AUTHENTICATED -> PROCEED TO LOGIN
+                document.getElementById("username").value = authUserObject.displayName;
+                login();
+            } else {
+                // NOT AUTHENTICATED -> TRIGGER POPUP
+                const provider = new firebase.auth.GoogleAuthProvider();
+                auth.signInWithPopup(provider)
+                    .then((result) => {
+                        // After successful sign-in, try to log in to room
+                        authUserObject = result.user;
+                        document.getElementById("username").value = result.user.displayName;
+                        login();
+                    }).catch((error) => {
+                        console.error(error);
+                        alert("Google Sign-In Failed: " + error.message);
+                    });
+            }
         }
 
-        // --- CORE FUNCTIONS ---
-
+        // --- CORE LOGIN LOGIC ---
         function login() {
             const name = document.getElementById("username").value.trim();
             const room = document.getElementById("room-code").value.trim();
             
             if(!name || !room) return alert("Credentials missing.");
 
+            // CHECK: Does this room exist?
+            // If I am a student, I cannot create rooms.
+            if (currentUser.role === 'student') {
+                db.ref(`rooms/${room}`).get().then((snapshot) => {
+                    if (snapshot.exists()) {
+                        // Room exists, proceed
+                        proceedToApp(name, room);
+                    } else {
+                        // Room does NOT exist
+                        alert("ACCESS DENIED: Room has not been opened by a Teacher yet.");
+                        return; // Stop here
+                    }
+                }).catch((error) => {
+                    console.error(error);
+                    alert("Connection Error: " + error.message);
+                });
+            } else {
+                // Teachers can create rooms
+                proceedToApp(name, room);
+            }
+        }
+
+        function proceedToApp(name, room) {
             currentUser.name = name;
             currentUser.room = room;
 
@@ -208,24 +276,24 @@
             const roleDisplay = currentUser.role === 'teacher' ? "ADMIN" : "STUDENT";
             document.getElementById("display-name").innerText = `${name} [${roleDisplay}]`;
 
-            // 1. Add User to DB
+            // Register User Presence
             const userRef = db.ref(`rooms/${room}/users/${name}`);
             userRef.set({ role: currentUser.role, lastSeen: Date.now() });
             userRef.onDisconnect().remove();
 
-            // 2. Start Listeners
+            // Start Listeners
             listenForMessages();
             listenForUsers();
         }
 
         function signOut() {
-            // Remove user from DB
             if(currentUser.name && currentUser.room) {
                 db.ref(`rooms/${currentUser.room}/users/${currentUser.name}`).remove();
             }
             
-            // Sign out of Google too
-            auth.signOut();
+            // We do NOT sign out of Google auth here automatically, 
+            // so they can rejoin easily. If you want full logout:
+            // auth.signOut(); 
 
             // Detach listeners
             dbListeners.forEach(ref => ref.off());
@@ -236,17 +304,6 @@
             document.getElementById("dynamic-user-list").innerHTML = "";
             document.getElementById("app-screen").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");
-            
-            // Reset Inputs
-            const nameInput = document.getElementById("username");
-            nameInput.value = "";
-            nameInput.disabled = false; // Unlock
-            nameInput.style.borderColor = "#0f0";
-
-            const urlParams = new URLSearchParams(window.location.search);
-            if (!urlParams.get('room')) {
-                document.getElementById("room-code").value = "";
-            }
             
             selectedTarget = "ALL";
             document.getElementById("target-display").innerText = "ALL (Broadcast)";
